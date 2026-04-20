@@ -139,30 +139,49 @@ def _extract_via_e2b(task_output: str, task_description: str) -> Optional[Extrac
 
 
 def _extract_via_regex(task_output: str, task_description: str = "") -> ExtractionResult:
-    """Legacy regex fallback — used when E2B is unreachable or invalid."""
+    """Legacy regex fallback — used when E2B is unreachable or invalid.
+    
+    Each line is matched to at most ONE category (priority: decisions > lessons > patterns).
+    """
     result = ExtractionResult(method="regex")
 
     for line in task_output.split("\n"):
-        line_lower = line.lower().strip()
+        line = line.strip()
+        if not line:
+            continue
+        line_lower = line.lower()
+
+        # Priority: decisions > lessons > patterns (first match wins)
+        matched = False
 
         if any(kw in line_lower for kw in [
             "decided to", "chose", "decision:", "went with",
             "approach:", "strategy:", "picked"
         ]):
-            result.decisions.append(line.strip())
+            # Make sure this line isn't also a lesson/keyword line
+            if not any(kw in line_lower for kw in [
+                "lesson:", "learned:", "note to self", "important:",
+                "gotcha:", "pitfall:", "watch out", "bug:",
+                "never", "always", "must", "pattern:", "workaround:",
+                "fix:", "solution:", "the trick is", "key insight:"
+            ]):
+                result.decisions.append(line)
+                matched = True
 
-        if any(kw in line_lower for kw in [
+        if not matched and any(kw in line_lower for kw in [
             "lesson:", "learned:", "note to self", "important:",
             "gotcha:", "pitfall:", "watch out", "bug:",
             "never", "always", "must"
         ]):
-            result.lessons.append(line.strip())
+            result.lessons.append(line)
+            matched = True
 
-        if any(kw in line_lower for kw in [
+        if not matched and any(kw in line_lower for kw in [
             "pattern:", "workaround:", "fix:", "solution:",
             "the trick is", "key insight:"
         ]):
-            result.code_patterns.append(line.strip())
+            result.code_patterns.append(line)
+            matched = True
 
     parts = []
     if task_description:
