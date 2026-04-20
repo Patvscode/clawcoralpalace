@@ -1,96 +1,87 @@
 # clawcoralpalace ⚡
 
-The unified orchestration stack for the OpenClaw ecosystem.
-
-## What It Does
-
-`clawcoralpalace` integrates four layers into a single task lifecycle:
-
-| Layer | Component | Role |
-|-------|-----------|------|
-| **Kernel** | OpenClaw | Hardware, model routing, agent comms |
-| **Orchestrator** | CORAL | Task lifecycle, agent coordination |
-| **Knowledge** | MemPalace | Long-term memory, RAG, knowledge graph |
-| **Execution** | Claw Code | Isolated coding agent loops |
+The knowledge pipeline for OpenClaw — extracts, files, and recalls learnings from every coding task.
 
 ## Quick Start
 
 ```bash
-# Run a task with full CORAL lifecycle
-python claw_task_runner.py examples/fix-yaml-bug.yaml \
-    --scope src/config.py tests/test_config.py
+# Per-task knowledge capture (after any coding task)
+python3 weave.py --desc "Fix YAML parsing bug" --input task_output.txt --agent main
 
-# Dry run (shows what would happen)
-python claw_task_runner.py examples/fix-yaml-bug.yaml \
-    --scope src/config.py --dry-run
+# Dry run (extract only, don't file)
+python3 weave.py --desc "Fix YAML parsing bug" --input task_output.txt --agent main --dry-run
 
-# Skip MemPalace integration (just run the Scrubber)
-python claw_task_runner.py examples/fix-yaml-bug.yaml \
-    --scope src/config.py --skip-recall --skip-capture
+# Autonomous daily capture (runs 23:00 nightly)
+python3 daily_capture.py --agent main --date 2026-04-20
 ```
 
-## The CORAL Task Lifecycle
+## How It Works
 
 ```
-RECEIVE → RECALL → SCOPE → INJECT → EXECUTE → CAPTURE → REPORT
-           ↑ MemPalace     ↑ Scrubber          ↑ Compactor
+Agent codes (claw-code, exec, codex, etc.)
+    ↓
+weave.py extracts structured knowledge → files into MemPalace
+    ↓
+MemPalace stores decisions, lessons, patterns, facts
+    ↓
+Future tasks recall relevant context before starting
+    ↓
+System gets better over time
 ```
 
-1. **RECEIVE** — Task definition (YAML/JSON config)
-2. **RECALL** — Query MemPalace for prior knowledge about this work
-3. **SCOPE** — Select only the files needed (the Scrubber)
-4. **INJECT** — Write recalled context as CONTEXT.md in the worktree
-5. **EXECUTE** — Run claw-code in the isolated worktree
-6. **CAPTURE** — Extract decisions/lessons/patterns → file into MemPalace
-7. **REPORT** — Summarize results back to the caller
+**Two capture modes:**
+- **Per-task** (`weave.py`) — real-time extraction after coding tasks
+- **Daily** (`daily_capture.py`) — nightly batch extraction from agent daily logs
+
+## Components
+
+| File | Role | Status |
+|------|------|--------|
+| `weave.py` | Main API — extract & file task knowledge | ✅ Working |
+| `compactor.py` | Knowledge extraction (E2B + regex fallback) | ✅ Working |
+| `mempalace_bridge.py` | Recall/capture via MemPalace CLI | ✅ Working |
+| `daily_capture.py` | Nightly autonomous learning (23:00) | ✅ Working |
+| `claw_task_runner.py` | Legacy CORAL task runner (manual CLI) | ⚠️ Dead-end |
+| `coral_task/` | Standalone CORAL grading experiment | ✅ Working (isolated) |
+
+## What's Actually Working
+
+- **Compactor** — Gemma E2B on :18081 extracts clean structured JSON. Falls back to regex on failure.
+- **Daily capture** — Reads each agent's `memory/YYYY-MM-DD.md`, asks Jess on :18080 to extract learnings, files into MemPalace. Fires 23:00 nightly via systemd timer.
+- **Weave** — Single function `capture_task()` that extracts + files any coding task output into MemPalace.
+- **MemPalace bridge** — `recall()` and `capture()` functions work end-to-end.
+- **CORAL grader** — Standalone experiment, 6/6 smoke test. Not integrated into daily workflow.
+
+## What's NOT Working Yet
+
+- **claw_task_runner.py** — Dead-end CLI tool. Not wired into agent workflows.
+- **Code delivery** — Worktree changes aren't copied back to the real project.
+- **Active recall** — Agents don't automatically query MemPalace before coding.
+- **CORAL end-to-end** — Grader works standalone, not integrated into task pipeline.
 
 ## Architecture
 
-### The Context Tiers
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Agent codes    │────▶│  weave.py    │────▶│  MemPalace  │
+│  (any tool)     │     │  extract     │     │  storage    │
+└─────────────────┘     └──────────────┘     └─────────────┘
+                                │                    │
+                                ▼                    ▼
+                        ┌──────────────┐     ┌─────────────┐
+                        │  E2B (:18081)│     │  recall()   │
+                        │  or regex    │     │  for future │
+                        └──────────────┘     └─────────────┘
 
-| Tier | Component | Function |
-|------|-----------|----------|
-| **Long-Term** | AGENTS.md, CORAL.md | Durable instructions, always present |
-| **Mid-Term** | Compactor + MemPalace | Structured knowledge from past work |
-| **Short-Term** | Scrubber worktrees | Only task-relevant files |
-
-### Files
-
-| File | Purpose |
-|------|---------|
-| `claw_task_runner.py` | Entry point — full CORAL lifecycle |
-| `mempalace_bridge.py` | MemPalace integration (recall + capture) |
-| `compactor.py` | Knowledge extraction from task output |
-| `CORAL.md` | Orchestration protocol reference |
-| `examples/` | Task config examples |
-| `dashboard/` | Phase 4 web dashboard + API |
-
-## Implementation Status
-
-- [x] **Phase 1: The Scrubber** — Isolated worktree execution
-- [x] **Phase 2: The Compactor** — Knowledge extraction + MemPalace filing
-- [x] **Phase 3: The Bridge** — MemPalace recall → context injection (uses native `mempalace` CLI)
-- [x] **Phase 4: Dashboard** — Clawboard hub page at `hub/46-clawcoralpalace/`, API on port 8106
-- [x] **Phase 5a: Autonomous Daily Capture** — Jess (Qwen 35B) extracts learnings from daily logs, fires 23:00 nightly
-- [x] **Phase 5b: Model-Powered Per-Task Compaction** — Gemma E2B (:18081) for real-time task compaction, regex fallback on failure
-- [x] **Phase 6a: CORAL Task + Grader** — `coral_task/` holds a CORAL-runnable task + function grader that validates both artifact quality and MemPalace capture (6/6 on smoke test)
-- [ ] **Phase 6b: CORAL End-to-End Run** — execute `coral start` against the task, confirm grader output + score propagation, add eval loop tests
-
-## Task Config Format
-
-```yaml
-description: "What this task does"
-model: "gemma-4-26b"           # Which model to use
-wing: "myproject"              # MemPalace wing for filing
-room: "code"                   # MemPalace room for filing
-recall_query: "relevant search" # What to ask MemPalace before starting
-entities: ["entity1"]          # KG entities to check
-prompt: "Instructions for claw-code"
+┌─────────────────────────────────────────────┐
+│  daily_capture.py (23:00 nightly)           │
+│  Reads agent daily logs → Jess → MemPalace  │
+└─────────────────────────────────────────────┘
 ```
 
 ## Dependencies
 
 - Python 3.10+
-- `mcporter` CLI (for MemPalace MCP calls) or MemPalace HTTP endpoint
-- `claw-code` binary (set `CLAW_PATH` env var if not at `/home/pmello/bin/claw-code`)
-- Optional: `pyyaml` (for YAML configs; JSON always works)
+- MemPalace CLI (in `~/.venvs/mempalace/bin/mempalace`)
+- Gemma E2B on :18081 (for per-task extraction)
+- Qwen 3.6 on :18080 (for daily capture)
