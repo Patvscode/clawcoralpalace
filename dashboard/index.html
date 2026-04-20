@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🪸 CORAL Palace — clawcoralpalace</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0b0f14;
+  color: #e4e7eb;
+  min-height: 100vh;
+  padding: 20px;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid #1e2734;
+  margin-bottom: 30px;
+}
+h1 { font-size: 28px; font-weight: 600; }
+h1 .accent { color: #ff6b8a; }
+.subtitle { color: #7a8494; font-size: 14px; margin-top: 4px; }
+.back-link {
+  color: #5ec8ff;
+  text-decoration: none;
+  font-size: 14px;
+}
+.back-link:hover { text-decoration: underline; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.card {
+  background: #141b24;
+  border: 1px solid #1e2734;
+  border-radius: 12px;
+  padding: 20px;
+}
+.card h2 {
+  font-size: 16px;
+  color: #9ba8bb;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.metric {
+  font-size: 32px;
+  font-weight: 600;
+  color: #ff6b8a;
+  margin-bottom: 4px;
+}
+.metric-label { font-size: 13px; color: #7a8494; }
+
+.stack-diagram {
+  background: #141b24;
+  border: 1px solid #1e2734;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 30px;
+}
+.layer {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border-left: 4px solid;
+}
+.layer .badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  margin-right: 12px;
+  font-weight: 600;
+}
+.layer .name { font-weight: 600; margin-right: 12px; }
+.layer .desc { color: #9ba8bb; font-size: 13px; }
+.layer-kernel { border-color: #5ec8ff; background: rgba(94,200,255,0.05); }
+.layer-orch { border-color: #ff6b8a; background: rgba(255,107,138,0.05); }
+.layer-mem { border-color: #b794f6; background: rgba(183,148,246,0.05); }
+.layer-exec { border-color: #68d391; background: rgba(104,211,145,0.05); }
+
+.phases {
+  background: #141b24;
+  border: 1px solid #1e2734;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 30px;
+}
+.phases h2 {
+  font-size: 16px;
+  color: #9ba8bb;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.phase {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #1e2734;
+}
+.phase:last-child { border-bottom: none; }
+.phase-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.phase-done { background: #68d391; color: #0b0f14; }
+.phase-todo { background: #2d3748; color: #7a8494; }
+.phase-name { font-weight: 500; }
+.phase-desc { color: #7a8494; font-size: 13px; margin-left: 8px; }
+
+.task-runner {
+  background: #141b24;
+  border: 1px solid #1e2734;
+  border-radius: 12px;
+  padding: 24px;
+}
+.task-runner h2 {
+  font-size: 16px;
+  color: #9ba8bb;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-group { margin-bottom: 14px; }
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: #7a8494;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-group input, .form-group textarea {
+  width: 100%;
+  background: #0b0f14;
+  border: 1px solid #1e2734;
+  border-radius: 6px;
+  color: #e4e7eb;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.form-group textarea { resize: vertical; min-height: 80px; font-family: "SF Mono", Menlo, monospace; }
+button {
+  background: #ff6b8a;
+  color: #0b0f14;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+button:hover { background: #ff8fa3; }
+button:disabled { background: #4a5568; cursor: not-allowed; }
+
+.output {
+  background: #0b0f14;
+  border: 1px solid #1e2734;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 14px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+  color: #9ba8bb;
+}
+
+.repo-link {
+  color: #5ec8ff;
+  text-decoration: none;
+  font-size: 13px;
+}
+.repo-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>🪸 <span class="accent">CORAL Palace</span> <span style="color:#7a8494;font-size:14px;font-weight:400;">clawcoralpalace</span></h1>
+      <div class="subtitle">
+        Unified orchestration stack ·
+        <a href="https://github.com/Patvscode/clawcoralpalace" class="repo-link" target="_blank">github.com/Patvscode/clawcoralpalace</a>
+      </div>
+    </div>
+    <a href="/" class="back-link">← Hub</a>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>MemPalace</h2>
+      <div class="metric" id="drawer-count">—</div>
+      <div class="metric-label">total drawers</div>
+    </div>
+    <div class="card">
+      <h2>Wings</h2>
+      <div class="metric" id="wing-count">—</div>
+      <div class="metric-label">project domains</div>
+    </div>
+    <div class="card">
+      <h2>Rooms</h2>
+      <div class="metric" id="room-count">—</div>
+      <div class="metric-label">topic spaces</div>
+    </div>
+    <div class="card">
+      <h2>Status</h2>
+      <div class="metric" id="status-indicator" style="font-size:22px;">🟢 Live</div>
+      <div class="metric-label">last updated <span id="last-update">—</span></div>
+    </div>
+  </div>
+
+  <div class="stack-diagram">
+    <h2 style="font-size:16px;color:#9ba8bb;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;">The Stack</h2>
+    <div class="layer layer-kernel">
+      <span class="badge">KERNEL</span>
+      <span class="name">OpenClaw</span>
+      <span class="desc">Hardware, model routing, agent comms</span>
+    </div>
+    <div class="layer layer-orch">
+      <span class="badge">ORCH</span>
+      <span class="name">CORAL</span>
+      <span class="desc">Task lifecycle, multi-agent coordination, grading</span>
+    </div>
+    <div class="layer layer-mem">
+      <span class="badge">MEMORY</span>
+      <span class="name">MemPalace</span>
+      <span class="desc">Long-term RAG, knowledge graph, AAAK dialect</span>
+    </div>
+    <div class="layer layer-exec">
+      <span class="badge">EXEC</span>
+      <span class="name">Claw Code</span>
+      <span class="desc">Isolated coding agent execution</span>
+    </div>
+  </div>
+
+  <div class="phases">
+    <h2>Implementation Phases</h2>
+    <div class="phase">
+      <div class="phase-status phase-done">✓</div>
+      <div><span class="phase-name">Phase 1: The Scrubber</span><span class="phase-desc">— isolated worktree execution</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-status phase-done">✓</div>
+      <div><span class="phase-name">Phase 2: The Compactor</span><span class="phase-desc">— knowledge extraction → MemPalace</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-status phase-done">✓</div>
+      <div><span class="phase-name">Phase 3: The Bridge</span><span class="phase-desc">— MemPalace recall → context injection</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-status phase-done">✓</div>
+      <div><span class="phase-name">Phase 4: Dashboard</span><span class="phase-desc">— this view (you are here)</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-status phase-todo">·</div>
+      <div><span class="phase-name">Phase 5: Model-Powered Extraction</span><span class="phase-desc">— use Gemma E2B for smart compaction</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-status phase-todo">·</div>
+      <div><span class="phase-name">Phase 6: Real CORAL Integration</span><span class="phase-desc">— wire to Human-Agent-Society/CORAL eval + grading</span></div>
+    </div>
+  </div>
+
+  <div class="task-runner">
+    <h2>🧠 MemPalace Recall Test</h2>
+    <div class="form-group">
+      <label>Query</label>
+      <input type="text" id="recall-query" placeholder="e.g. CORAL integration plan" value="">
+    </div>
+    <div class="form-group">
+      <label>Wing (optional)</label>
+      <input type="text" id="recall-wing" placeholder="leave empty to search all wings">
+    </div>
+    <button onclick="runRecall()">Recall from MemPalace</button>
+    <div class="output" id="recall-output" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+// API runs on its own port, same host as dashboard
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:8106`;
+
+async function loadStatus() {
+  try {
+    const resp = await fetch(`${API_BASE}/status`);
+    const data = await resp.json();
+    document.getElementById('drawer-count').textContent = data.total_drawers?.toLocaleString() ?? '?';
+    document.getElementById('wing-count').textContent = Object.keys(data.wings || {}).length;
+    document.getElementById('room-count').textContent = Object.keys(data.rooms || {}).length;
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+  } catch (e) {
+    document.getElementById('status-indicator').innerHTML = '🔴 API down';
+  }
+}
+
+async function runRecall() {
+  const query = document.getElementById('recall-query').value.trim();
+  if (!query) return;
+  const wing = document.getElementById('recall-wing').value.trim();
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Recalling...';
+  const out = document.getElementById('recall-output');
+  out.style.display = 'block';
+  out.textContent = 'Querying MemPalace...';
+
+  try {
+    const params = new URLSearchParams({ query });
+    if (wing) params.set('wing', wing);
+    const resp = await fetch(`${API_BASE}/recall?` + params.toString());
+    const data = await resp.json();
+    out.textContent = data.context_md || data.error || 'No results';
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Recall from MemPalace';
+  }
+}
+
+loadStatus();
+setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>

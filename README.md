@@ -63,14 +63,16 @@ RECEIVE → RECALL → SCOPE → INJECT → EXECUTE → CAPTURE → REPORT
 | `compactor.py` | Knowledge extraction from task output |
 | `CORAL.md` | Orchestration protocol reference |
 | `examples/` | Task config examples |
+| `dashboard/` | Phase 4 web dashboard + API |
 
 ## Implementation Status
 
 - [x] **Phase 1: The Scrubber** — Isolated worktree execution
 - [x] **Phase 2: The Compactor** — Knowledge extraction + MemPalace filing
-- [x] **Phase 3: The Bridge** — MemPalace recall → context injection
-- [ ] **Phase 4: Unified Dashboard** — Clawboard integration (future)
+- [x] **Phase 3: The Bridge** — MemPalace recall → context injection (uses native `mempalace` CLI)
+- [x] **Phase 4: Dashboard** — Clawboard hub page at `hub/46-clawcoralpalace/`, API on port 8106
 - [ ] **Phase 5: Model-Powered Extraction** — Use Gemma E2B for smart compaction
+- [ ] **Phase 6: Real CORAL Integration** — wire to Human-Agent-Society/CORAL eval + grading
 
 ## Task Config Format
 

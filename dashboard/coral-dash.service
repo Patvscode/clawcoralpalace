@@ -1,0 +1,16 @@
+[Unit]
+Description=CORAL Palace Dashboard API (port 8106)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/pmello/.openclaw/hub/46-clawcoralpalace/api.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/pmello/.openclaw/hub/46-clawcoralpalace/api.log
+StandardError=append:/home/pmello/.openclaw/hub/46-clawcoralpalace/api.log
+Environment="CORAL_DASH_PORT=8106"
+Environment="MEMPALACE_BIN=/home/pmello/.venvs/mempalace/bin/mempalace"
+
+[Install]
+WantedBy=default.target
