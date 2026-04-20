@@ -121,7 +121,6 @@ def compact_and_capture(
             content=content,
             wing=wing,
             room="decisions",
-            entities=extraction.entities,
             source_file=source_file,
             agent_name=agent_name,
         )

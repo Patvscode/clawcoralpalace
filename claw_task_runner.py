@@ -28,9 +28,9 @@ from compactor import compact_and_capture, extract_knowledge
 
 def load_task_config(path: str) -> dict:
     """Load task config from YAML or JSON."""
-    p = Path(path)
+    p = Path(path).expanduser().resolve()
     if not p.exists():
-        print(f"Error: Task config {path} not found.")
+        print(f"Error: Task config {path} not found (resolved: {p}).")
         sys.exit(1)
 
     with open(p) as f:
@@ -81,11 +81,9 @@ def run_task(
             recalled_context = recall(
                 query=recall_query,
                 wing=wing if wing != "clawcoralpalace" else None,
-                entities=entities,
             )
-            if recalled_context.results or recalled_context.kg_facts:
-                print(f"   Found {len(recalled_context.results)} results, "
-                      f"{len(recalled_context.kg_facts)} KG facts")
+            if recalled_context.results:
+                print(f"   Found {len(recalled_context.results)} results")
             else:
                 print("   No prior knowledge found — starting fresh")
         except Exception as e:
@@ -129,7 +127,7 @@ def run_task(
                     break
 
         # ── Step 4: Inject recalled context ──
-        if recalled_context and (recalled_context.results or recalled_context.kg_facts):
+        if recalled_context and recalled_context.results:
             context_md = worktree / "CONTEXT.md"
             context_md.write_text(recalled_context.to_context_md())
             print("   ✅ CONTEXT.md (MemPalace recall)")
@@ -189,11 +187,10 @@ def run_task(
                     agent_name="coral",
                     source_file=task_config_path,
                 )
-                filed = sum(1 for c in captures if c.drawer_id)
-                dupes = sum(1 for c in captures if c.duplicate)
-                kg_total = sum(c.kg_facts_added for c in captures)
-                print(f"   Filed: {filed} drawers, {kg_total} KG facts "
-                      f"({dupes} duplicates skipped)")
+                filed = sum(1 for c in captures if c.filed)
+                failed = sum(1 for c in captures if c.error)
+                print(f"   Filed: {filed}/{len(captures)} drawers" +
+                      (f" ({failed} errors)" if failed else ""))
             except Exception as e:
                 print(f"   ⚠️ Capture failed: {e}")
 

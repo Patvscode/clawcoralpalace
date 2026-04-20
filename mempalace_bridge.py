@@ -1,13 +1,18 @@
 """
-mempalace_bridge.py — The Bridge (Phase 3)
+mempalace_bridge.py — The Bridge between CORAL and MemPalace
 
-Connects CORAL task lifecycle to MemPalace for knowledge recall and capture.
+Uses the native `mempalace` CLI (not MCP) for reliable Python-to-Python calls.
+MemPalace runs as both an MCP server (for agents) and a CLI (for scripts).
+
 Two main operations:
   - recall(query, wing, room) → retrieves relevant context for task injection
-  - capture(content, wing, room, entities) → files results back into MemPalace + KG
+  - capture(content, wing, room, source_file) → files results back
 """
 
 import json
+import os
+import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -15,26 +20,32 @@ from pathlib import Path
 from typing import Optional
 
 
-# MemPalace MCP tool names (called via mcporter or direct MCP)
-MEMPALACE_TOOLS = {
-    "search": "mempalace__mempalace_search",
-    "add": "mempalace__mempalace_add_drawer",
-    "kg_query": "mempalace__mempalace_kg_query",
-    "kg_add": "mempalace__mempalace_kg_add",
-    "diary_write": "mempalace__mempalace_diary_write",
-    "check_dup": "mempalace__mempalace_check_duplicate",
-}
+# Resolve the mempalace CLI — prefer venv, fallback to PATH
+MEMPALACE_BIN = os.environ.get("MEMPALACE_BIN") or shutil.which("mempalace")
+if not MEMPALACE_BIN:
+    venv_candidate = Path.home() / ".venvs" / "mempalace" / "bin" / "mempalace"
+    if venv_candidate.exists():
+        MEMPALACE_BIN = str(venv_candidate)
 
-MAX_RECALL_TOKENS = 2000  # Hard cap on injected context size
+MAX_RECALL_TOKENS = 2000  # Hard cap on injected context size (rough: 4 chars/token)
 MAX_RECALL_RESULTS = 5
+
+
+@dataclass
+class RecalledResult:
+    """Single search hit from MemPalace."""
+    wing: str = ""
+    room: str = ""
+    content: str = ""
+    source: str = ""
+    score: float = 0.0
 
 
 @dataclass
 class RecalledContext:
     """Container for context retrieved from MemPalace."""
     query: str
-    results: list[dict] = field(default_factory=list)
-    kg_facts: list[dict] = field(default_factory=list)
+    results: list[RecalledResult] = field(default_factory=list)
     total_chars: int = 0
 
     def to_context_md(self) -> str:
@@ -45,32 +56,29 @@ class RecalledContext:
             "",
         ]
 
-        if self.kg_facts:
-            lines.append("## Known Relationships")
-            for fact in self.kg_facts:
-                subj = fact.get("subject", "?")
-                pred = fact.get("predicate", "?")
-                obj = fact.get("object", "?")
-                lines.append(f"- {subj} → {pred} → {obj}")
-            lines.append("")
+        if not self.results:
+            lines.append("_No prior knowledge found in MemPalace._")
+            return "\n".join(lines)
 
-        if self.results:
-            lines.append("## Prior Knowledge")
-            for i, r in enumerate(self.results, 1):
-                content = r.get("content", "")
-                wing = r.get("wing", "unknown")
-                room = r.get("room", "unknown")
-                score = r.get("score", 0)
-                # Truncate individual results to keep total under budget
-                if len(content) > 500:
-                    content = content[:500] + "..."
-                lines.append(f"### [{i}] {wing}/{room} (score: {score:.2f})")
-                lines.append(content)
-                lines.append("")
+        lines.append("## Prior Knowledge")
+        for i, r in enumerate(self.results, 1):
+            content = r.content.strip()
+            # Truncate individual results
+            if len(content) > 500:
+                content = content[:500] + "..."
+            header = f"### [{i}] {r.wing}/{r.room}"
+            if r.score:
+                header += f" (score: {r.score:.3f})"
+            lines.append(header)
+            if r.source:
+                lines.append(f"_source: {r.source}_")
+            lines.append("")
+            lines.append(content)
+            lines.append("")
 
         output = "\n".join(lines)
 
-        # Hard truncation at token budget (rough: 1 token ≈ 4 chars)
+        # Hard truncation at token budget
         max_chars = MAX_RECALL_TOKENS * 4
         if len(output) > max_chars:
             output = output[:max_chars] + "\n\n_[truncated — context budget reached]_"
@@ -78,11 +86,50 @@ class RecalledContext:
         return output
 
 
+def _parse_search_output(text: str) -> list[RecalledResult]:
+    """Parse `mempalace search` CLI output into structured results."""
+    results = []
+    # Strip ANSI color codes
+    text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+    # Pattern: [N] wing / room
+    #          Source: ...
+    #          Match:  0.XXX
+    #          (blank line)
+    #          content lines until next [N] or end
+    result_re = re.compile(
+        r'\[(\d+)\]\s+(\S+)\s*/\s*(\S+)\s*\n'
+        r'\s*Source:\s*(.+?)\n'
+        r'\s*Match:\s*([\d.]+)\s*\n',
+        re.MULTILINE,
+    )
+
+    matches = list(result_re.finditer(text))
+    for i, m in enumerate(matches):
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        content_block = text[start:end].strip()
+
+        try:
+            score = float(m.group(5))
+        except ValueError:
+            score = 0.0
+
+        results.append(RecalledResult(
+            wing=m.group(2).strip(),
+            room=m.group(3).strip(),
+            content=content_block,
+            source=m.group(4).strip(),
+            score=score,
+        ))
+
+    return results
+
+
 def recall(
     query: str,
     wing: Optional[str] = None,
     room: Optional[str] = None,
-    entities: Optional[list[str]] = None,
     limit: int = MAX_RECALL_RESULTS,
 ) -> RecalledContext:
     """
@@ -92,7 +139,6 @@ def recall(
         query: Natural language description of what we need
         wing: Optional wing filter (project name)
         room: Optional room filter (topic)
-        entities: Optional entity names to query KG for
         limit: Max number of search results
 
     Returns:
@@ -100,29 +146,32 @@ def recall(
     """
     ctx = RecalledContext(query=query)
 
-    # 1. Semantic search
-    search_args = {"query": query, "limit": limit}
+    if not MEMPALACE_BIN:
+        print("⚠️ mempalace CLI not found — skipping recall", file=sys.stderr)
+        return ctx
+
+    cmd = [MEMPALACE_BIN, "search", query, "--results", str(limit)]
     if wing:
-        search_args["wing"] = wing
+        cmd.extend(["--wing", wing])
     if room:
-        search_args["room"] = room
+        cmd.extend(["--room", room])
 
     try:
-        results = _call_mempalace("search", search_args)
-        if results and "results" in results:
-            ctx.results = results["results"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={**os.environ, "TERM": "dumb"},  # suppress color codes
+        )
+        if result.returncode == 0:
+            ctx.results = _parse_search_output(result.stdout)
+        else:
+            print(f"⚠️ mempalace search failed: {result.stderr[:200]}", file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        print(f"⚠️ mempalace search timed out after 30s", file=sys.stderr)
     except Exception as e:
-        print(f"⚠️ MemPalace search failed: {e}", file=sys.stderr)
-
-    # 2. KG queries for named entities
-    if entities:
-        for entity in entities:
-            try:
-                kg = _call_mempalace("kg_query", {"entity": entity})
-                if kg and "facts" in kg:
-                    ctx.kg_facts.extend(kg["facts"])
-            except Exception as e:
-                print(f"⚠️ KG query for '{entity}' failed: {e}", file=sys.stderr)
+        print(f"⚠️ mempalace search error: {e}", file=sys.stderr)
 
     ctx.total_chars = len(ctx.to_context_md())
     return ctx
@@ -131,28 +180,29 @@ def recall(
 @dataclass
 class CaptureResult:
     """Result of capturing knowledge back into MemPalace."""
-    drawer_id: Optional[str] = None
-    kg_facts_added: int = 0
-    duplicate: bool = False
+    filed: bool = False
+    error: Optional[str] = None
+    path: Optional[str] = None
 
 
 def capture(
     content: str,
     wing: str,
     room: str,
-    entities: Optional[list[tuple[str, str, str]]] = None,
     source_file: Optional[str] = None,
     agent_name: str = "coral",
 ) -> CaptureResult:
     """
     File knowledge back into MemPalace after task completion.
 
+    The `mempalace` CLI mines from files rather than accepting inline content,
+    so we write the content to a temp file and mine that.
+
     Args:
-        content: The knowledge to store (verbatim)
+        content: The knowledge to store
         wing: Project/domain wing
         room: Topic room
-        entities: Optional KG triples as (subject, predicate, object)
-        source_file: Where this knowledge came from
+        source_file: Where this knowledge came from (original path)
         agent_name: Which agent is filing this
 
     Returns:
@@ -160,127 +210,129 @@ def capture(
     """
     result = CaptureResult()
 
-    # 1. Check for duplicates first
+    if not MEMPALACE_BIN:
+        result.error = "mempalace CLI not found"
+        return result
+
+    # Write content to a staging file the CLI can mine
+    import tempfile
+    from datetime import datetime
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    stage_dir = Path.home() / ".mempalace" / "staging" / wing / room
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    stage_file = stage_dir / f"{timestamp}_{agent_name}.md"
+
+    header_lines = [
+        f"# {room} — {wing}",
+        f"_Filed by {agent_name} at {timestamp}_",
+    ]
+    if source_file:
+        header_lines.append(f"_source: {source_file}_")
+    header_lines.append("")
+    full_content = "\n".join(header_lines) + content
+
     try:
-        dup_check = _call_mempalace("check_dup", {"content": content, "threshold": 0.85})
-        if dup_check and dup_check.get("is_duplicate"):
-            result.duplicate = True
-            print(f"ℹ️ Duplicate detected, skipping drawer filing", file=sys.stderr)
-            # Still add KG facts even if content is duplicate
+        stage_file.write_text(full_content)
+        result.path = str(stage_file)
+
+        # Mine the staging file
+        cmd = [
+            MEMPALACE_BIN, "mine", str(stage_file),
+            "--wing", wing,
+            "--room", room,
+        ]
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if proc.returncode == 0:
+            result.filed = True
         else:
-            # 2. File the drawer
-            add_args = {
-                "wing": wing,
-                "room": room,
-                "content": content,
-                "added_by": agent_name,
-            }
-            if source_file:
-                add_args["source_file"] = source_file
-
-            add_result = _call_mempalace("add", add_args)
-            if add_result:
-                result.drawer_id = add_result.get("drawer_id")
+            # Some versions of mempalace use `mine <dir>` not `mine <file>`
+            cmd_dir = [
+                MEMPALACE_BIN, "mine", str(stage_dir),
+                "--wing", wing,
+                "--room", room,
+            ]
+            proc2 = subprocess.run(cmd_dir, capture_output=True, text=True, timeout=60)
+            if proc2.returncode == 0:
+                result.filed = True
+            else:
+                result.error = (proc.stderr + proc2.stderr)[:500]
+    except subprocess.TimeoutExpired:
+        result.error = "mine operation timed out"
     except Exception as e:
-        print(f"⚠️ MemPalace capture failed: {e}", file=sys.stderr)
-
-    # 3. Add KG facts
-    if entities:
-        for subj, pred, obj in entities:
-            try:
-                _call_mempalace("kg_add", {
-                    "subject": subj,
-                    "predicate": pred,
-                    "object": obj,
-                })
-                result.kg_facts_added += 1
-            except Exception as e:
-                print(f"⚠️ KG add ({subj}→{pred}→{obj}) failed: {e}", file=sys.stderr)
+        result.error = str(e)
 
     return result
 
 
 def write_diary(agent_name: str, entry: str, topic: str = "task") -> bool:
-    """Write a diary entry for the agent in AAAK format."""
+    """
+    Write a diary entry for the agent. MemPalace CLI doesn't have a direct
+    diary command, so we stage it as a file under the agent's diary room
+    and mine it (which the MCP-level tools handle natively).
+    """
     try:
-        _call_mempalace("diary_write", {
-            "agent_name": agent_name,
-            "entry": entry,
-            "topic": topic,
-        })
-        return True
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        content = f"DIARY:{timestamp}|{agent_name}|{topic}|{entry}"
+        r = capture(
+            content=content,
+            wing=f"diary_{agent_name}",
+            room=topic,
+            agent_name=agent_name,
+        )
+        return r.filed
     except Exception as e:
-        print(f"⚠️ Diary write failed: {e}", file=sys.stderr)
+        print(f"⚠️ diary write failed: {e}", file=sys.stderr)
         return False
 
 
-def _call_mempalace(tool: str, args: dict) -> Optional[dict]:
-    """
-    Call a MemPalace MCP tool.
-
-    This uses mcporter CLI for now. In production, this would use
-    the MCP protocol directly or OpenClaw's built-in MCP bridge.
-    """
-    tool_name = MEMPALACE_TOOLS.get(tool, tool)
-
-    # Try mcporter first
-    cmd = [
-        "mcporter", "call",
-        "--server", "mempalace",
-        "--tool", tool_name,
-        "--args", json.dumps(args),
-    ]
+def status() -> dict:
+    """Get MemPalace palace status (total drawers, wings, rooms)."""
+    if not MEMPALACE_BIN:
+        return {"error": "mempalace CLI not found"}
 
     try:
-        result = subprocess.run(
-            cmd,
+        proc = subprocess.run(
+            [MEMPALACE_BIN, "status"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=10,
         )
-        if result.returncode == 0:
-            return json.loads(result.stdout) if result.stdout.strip() else {}
-        else:
-            # Fallback: try direct HTTP if mcporter isn't available
-            print(f"mcporter failed ({result.returncode}), trying fallback", file=sys.stderr)
-            return _call_mempalace_http(tool_name, args)
-    except FileNotFoundError:
-        return _call_mempalace_http(tool_name, args)
-    except subprocess.TimeoutExpired:
-        print(f"⚠️ MemPalace call timed out: {tool}", file=sys.stderr)
-        return None
-    except json.JSONDecodeError:
-        return {}
-
-
-def _call_mempalace_http(tool_name: str, args: dict) -> Optional[dict]:
-    """Fallback: call MemPalace via its HTTP MCP endpoint if available."""
-    import urllib.request
-    import urllib.error
-
-    url = "http://localhost:8200/mcp/call"  # Default MemPalace MCP port
-    payload = json.dumps({"tool": tool_name, "arguments": args}).encode()
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except (urllib.error.URLError, urllib.error.HTTPError) as e:
-        print(f"⚠️ HTTP fallback failed: {e}", file=sys.stderr)
-        return None
+        if proc.returncode == 0:
+            return {"output": proc.stdout, "ok": True}
+        return {"error": proc.stderr, "ok": False}
+    except Exception as e:
+        return {"error": str(e), "ok": False}
 
 
 if __name__ == "__main__":
-    # Quick test: recall something
-    import sys
-    if len(sys.argv) > 1:
-        query = " ".join(sys.argv[1:])
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print("  python mempalace_bridge.py recall <query>")
+        print("  python mempalace_bridge.py status")
+        print("  python mempalace_bridge.py capture <wing> <room> <content>")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "recall":
+        query = " ".join(sys.argv[2:])
         ctx = recall(query)
         print(ctx.to_context_md())
+    elif cmd == "status":
+        print(json.dumps(status(), indent=2))
+    elif cmd == "capture" and len(sys.argv) >= 5:
+        wing = sys.argv[2]
+        room = sys.argv[3]
+        content = " ".join(sys.argv[4:])
+        r = capture(content, wing, room)
+        print(f"Filed: {r.filed}, Path: {r.path}, Error: {r.error}")
     else:
-        print("Usage: python mempalace_bridge.py <query>")
-        print("Example: python mempalace_bridge.py 'how does the scrubber work'")
+        print(f"Unknown command: {cmd}")
+        sys.exit(1)
