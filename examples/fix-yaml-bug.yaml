@@ -1,0 +1,18 @@
+# Example task config for CORAL
+description: "Fix the YAML empty-file bug in config loader"
+model: "gemma-4-26b"
+wing: "clawcoralpalace"
+room: "code"
+
+# What to ask MemPalace before starting
+recall_query: "YAML parsing edge cases empty files"
+
+# Entities to check in the KG
+entities:
+  - "claw_task_runner"
+  - "yaml"
+
+# The prompt sent to claw-code
+prompt: |
+  Fix the bug where yaml.safe_load returns None for empty config files.
+  It should return an empty dict instead. Add a test.

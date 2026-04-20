@@ -2,29 +2,91 @@
 
 The unified orchestration stack for the OpenClaw ecosystem.
 
-`clawcoralpalace` integrates:
-- **OpenClaw** (The Kernel): System management, model routing, and core tool access.
-- **CORAL** (The Orchestrator): Multi-agent coordination, experiment loops, and task lifecycle management.
-- **MemPalace** (The Knowledge Base): Distributed, structured long-term memory and RAG.
-- **Claw Code** (The Execution Engine): High-performance, context-aware coding agents.
+## What It Does
 
-## 🏗️ Architecture
+`clawcoralpalace` integrates four layers into a single task lifecycle:
 
-This repository contains the "glue" that makes these components work as a single, recursive, self-improving operating system.
+| Layer | Component | Role |
+|-------|-----------|------|
+| **Kernel** | OpenClaw | Hardware, model routing, agent comms |
+| **Orchestrator** | CORAL | Task lifecycle, agent coordination |
+| **Knowledge** | MemPalace | Long-term memory, RAG, knowledge graph |
+| **Execution** | Claw Code | Isolated coding agent loops |
 
-### Core Components
+## Quick Start
 
-| Component | Role | Implementation |
-| :--- | :--- | :--- |
-| **Context Scrubber** | Man/age context window via task-specific worktrees. | `claw-task-runner.py` |
-| **Compactor** | Summarizes agent history and tool outputs. | `context-compactor/` |
-| **Integration Hooks** | Connects CORAL lifecycles to OpenClaw traces. | `hooks/` |
-| **Knowledge Sync** | Bridges MemPalace insights into agent prompts. | `mem-bridge/` |
+```bash
+# Run a task with full CORAL lifecycle
+python claw_task_runner.py examples/fix-yaml-bug.yaml \
+    --scope src/config.py tests/test_config.py
 
-## 🚀 Getting Started
+# Dry run (shows what would happen)
+python claw_task_runner.py examples/fix-yaml-bug.yaml \
+    --scope src/config.py --dry-run
 
-*(Work in progress)*
+# Skip MemPalace integration (just run the Scrubber)
+python claw_task_runner.py examples/fix-yaml-bug.yaml \
+    --scope src/config.py --skip-recall --skip-capture
+```
 
-## 🛠️ Development
+## The CORAL Task Lifecycle
 
-*(Work in progress)*
+```
+RECEIVE → RECALL → SCOPE → INJECT → EXECUTE → CAPTURE → REPORT
+           ↑ MemPalace     ↑ Scrubber          ↑ Compactor
+```
+
+1. **RECEIVE** — Task definition (YAML/JSON config)
+2. **RECALL** — Query MemPalace for prior knowledge about this work
+3. **SCOPE** — Select only the files needed (the Scrubber)
+4. **INJECT** — Write recalled context as CONTEXT.md in the worktree
+5. **EXECUTE** — Run claw-code in the isolated worktree
+6. **CAPTURE** — Extract decisions/lessons/patterns → file into MemPalace
+7. **REPORT** — Summarize results back to the caller
+
+## Architecture
+
+### The Context Tiers
+
+| Tier | Component | Function |
+|------|-----------|----------|
+| **Long-Term** | AGENTS.md, CORAL.md | Durable instructions, always present |
+| **Mid-Term** | Compactor + MemPalace | Structured knowledge from past work |
+| **Short-Term** | Scrubber worktrees | Only task-relevant files |
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `claw_task_runner.py` | Entry point — full CORAL lifecycle |
+| `mempalace_bridge.py` | MemPalace integration (recall + capture) |
+| `compactor.py` | Knowledge extraction from task output |
+| `CORAL.md` | Orchestration protocol reference |
+| `examples/` | Task config examples |
+
+## Implementation Status
+
+- [x] **Phase 1: The Scrubber** — Isolated worktree execution
+- [x] **Phase 2: The Compactor** — Knowledge extraction + MemPalace filing
+- [x] **Phase 3: The Bridge** — MemPalace recall → context injection
+- [ ] **Phase 4: Unified Dashboard** — Clawboard integration (future)
+- [ ] **Phase 5: Model-Powered Extraction** — Use Gemma E2B for smart compaction
+
+## Task Config Format
+
+```yaml
+description: "What this task does"
+model: "gemma-4-26b"           # Which model to use
+wing: "myproject"              # MemPalace wing for filing
+room: "code"                   # MemPalace room for filing
+recall_query: "relevant search" # What to ask MemPalace before starting
+entities: ["entity1"]          # KG entities to check
+prompt: "Instructions for claw-code"
+```
+
+## Dependencies
+
+- Python 3.10+
+- `mcporter` CLI (for MemPalace MCP calls) or MemPalace HTTP endpoint
+- `claw-code` binary (set `CLAW_PATH` env var if not at `/home/pmello/bin/claw-code`)
+- Optional: `pyyaml` (for YAML configs; JSON always works)
