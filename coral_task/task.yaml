@@ -1,0 +1,57 @@
+# clawcoralpalace × CORAL — Phase 6a end-to-end integration task
+#
+# What this proves:
+#   1. CORAL can drive our pipeline (Scrubber → Bridge → claw-code → Compactor)
+#   2. The Compactor (Gemma E2B) extracts structured knowledge from task output
+#   3. MemPalace is actually updated (grader verifies a post-run capture)
+#
+# Run from the CORAL repo:
+#   cd ~/research/references/CORAL
+#   source .venv/bin/activate
+#   coral start --config ~/DevTools/clawcoralpalace/coral_task/task.yaml
+
+task:
+  name: "clawcoralpalace-phase6a-smoke"
+  description: |
+    Produce a short Python module `utils.py` in the workspace that exposes a
+    single function `safe_yaml_load(path)` which:
+      - returns `{}` for empty or missing YAML files,
+      - returns the parsed dict otherwise,
+      - never raises on well-formed-but-empty input.
+
+    Include a small self-test guarded by `if __name__ == "__main__":` that
+    prints PASS / FAIL lines for at least three cases: empty file, missing
+    file, and a valid one-key file.
+
+    Keep it to a single file, standard library + pyyaml only.
+
+  tips: |
+    - One file: utils.py at the root of the workspace.
+    - The grader checks: file exists, has `safe_yaml_load`, handles the three
+      cases, and that our Compactor filed a MemPalace drawer under the
+      `clawcoralpalace-phase6a` wing.
+
+grader:
+  type: function
+  module: graders.phase6a_grader
+  args:
+    program_file: "utils.py"
+    wing: "clawcoralpalace-phase6a"
+  direction: maximize
+
+agents:
+  count: 1
+  runtime: claw_code
+  model: gemma-4-26b
+  runtime_options:
+    claw_path: "/home/pmello/bin/claw-code"
+    base_url: "http://127.0.0.1:18080/v1"
+    permission_mode: "danger-full-access"
+
+workspace:
+  repo_path: "./repo"
+
+run:
+  verbose: true
+  ui: false
+  session: local
