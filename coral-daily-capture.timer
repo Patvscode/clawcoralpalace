@@ -1,0 +1,9 @@
+[Unit]
+Description=Run daily capture at 23:00 EDT every day
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

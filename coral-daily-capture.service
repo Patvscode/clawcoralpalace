@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily autonomous learning capture (Jess → MemPalace)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/pmello/DevTools/clawcoralpalace/daily_capture.py
+StandardOutput=append:/home/pmello/DevTools/clawcoralpalace/daily_capture.log
+StandardError=append:/home/pmello/DevTools/clawcoralpalace/daily_capture.log

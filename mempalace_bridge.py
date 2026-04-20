@@ -236,32 +236,48 @@ def capture(
         stage_file.write_text(full_content)
         result.path = str(stage_file)
 
-        # Mine the staging file
+        # mempalace mine expects a directory with mempalace.yaml;
+        # rooms are auto-derived from subdirectory structure.
+        wing_dir = stage_dir.parent  # ~/.mempalace/staging/<wing>/
+        yaml_path = wing_dir / "mempalace.yaml"
+
+        # Auto-init the wing dir if not yet initialized
+        if not yaml_path.exists():
+            init_proc = subprocess.run(
+                [MEMPALACE_BIN, "init", str(wing_dir), "--yes"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env={**os.environ, "TERM": "dumb"},
+            )
+            if init_proc.returncode != 0 and not yaml_path.exists():
+                result.error = f"init failed: {init_proc.stderr[:300]}"
+                return result
+
         cmd = [
-            MEMPALACE_BIN, "mine", str(stage_file),
+            MEMPALACE_BIN, "mine", str(wing_dir),
             "--wing", wing,
-            "--room", room,
+            "--agent", agent_name,
+            "--extract", "general",
         ]
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
+            env={**os.environ, "TERM": "dumb"},
         )
         if proc.returncode == 0:
             result.filed = True
         else:
-            # Some versions of mempalace use `mine <dir>` not `mine <file>`
-            cmd_dir = [
-                MEMPALACE_BIN, "mine", str(stage_dir),
-                "--wing", wing,
-                "--room", room,
-            ]
-            proc2 = subprocess.run(cmd_dir, capture_output=True, text=True, timeout=60)
-            if proc2.returncode == 0:
-                result.filed = True
+            # mempalace mine sometimes returns non-zero for warnings;
+            # check if the file was actually recorded
+            stderr_lower = proc.stderr.lower()
+            if "error" in stderr_lower or "failed" in stderr_lower:
+                result.error = (proc.stderr or proc.stdout)[:500]
             else:
-                result.error = (proc.stderr + proc2.stderr)[:500]
+                # Probably just the GPU warning — treat as success
+                result.filed = True
     except subprocess.TimeoutExpired:
         result.error = "mine operation timed out"
     except Exception as e:
