@@ -71,7 +71,8 @@ RECEIVE → RECALL → SCOPE → INJECT → EXECUTE → CAPTURE → REPORT
 - [x] **Phase 2: The Compactor** — Knowledge extraction + MemPalace filing
 - [x] **Phase 3: The Bridge** — MemPalace recall → context injection (uses native `mempalace` CLI)
 - [x] **Phase 4: Dashboard** — Clawboard hub page at `hub/46-clawcoralpalace/`, API on port 8106
-- [ ] **Phase 5: Model-Powered Extraction** — Use Gemma E2B for smart compaction
+- [x] **Phase 5a: Autonomous Daily Capture** — Jess (Qwen 35B) extracts learnings from daily logs, fires 23:00 nightly
+- [x] **Phase 5b: Model-Powered Per-Task Compaction** — Gemma E2B (:18081) for real-time task compaction, regex fallback on failure
 - [ ] **Phase 6: Real CORAL Integration** — wire to Human-Agent-Society/CORAL eval + grading
 
 ## Task Config Format
